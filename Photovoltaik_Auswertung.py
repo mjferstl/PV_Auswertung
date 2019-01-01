@@ -1,6 +1,6 @@
 # Python-Skript zur grafischen Darstellung und Auswertung der Zaehlerstaende in den Unterordnern fuer alle Jahre und Monate
 # -----------------------------------------------------
-# Autor: Ferstl Mathias
+# Autor: mjferstl
 # Datum: 2019-01-01
 # -----------------------------------------------------
 # INFO:
