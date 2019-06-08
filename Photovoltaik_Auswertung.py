@@ -18,9 +18,12 @@ from datetime import datetime
 import pandas as pd
 
 # Lists fuer die Jahre, Monate und die Anzahl der Tage
-years = [2018,2017,2016,2015,2014,2013,2012]
+years = [2019,2018,2017,2016,2015,2014,2013,2012]
 months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dez']
 days = [31,28,31,30,31,30,31,31,30,31,30,31]
+
+# Ornder mit den Daten 
+data_folder = 'Daten'
 
 # Bezeichnugn der Monate fuer die Beschriftung der Plots
 Monate = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
@@ -46,9 +49,12 @@ n = 0
 # - m: den aktuell auszuwertenden Monat als fortlaufende Zahl von 0 bis 11
 def readData(y,m):
 	# Dateiname mit den Zaehlerstanden fuer aktuell auszuwertenden Monat
-	filename = str(y) + '/' + str(y) + '_' + months[m] + '.txt'
+	filename = data_folder + '/' + str(y) + '/' + str(y) + '_' + months[m] + '.txt'
 	
 	# Einlesen der Zeilen des Txt-Files
+	if not os.path.isfile(filename):
+		return ''
+
 	with open(filename) as file:
 		res = file.readlines()
 		
@@ -123,7 +129,7 @@ def readData(y,m):
 				else:
 					# Wenn es nicht der letzte Tag im letzten Monat des Jahres ist, dann Daten des Folgemonats laden
 					if m < (12-1):
-						filename = str(y) + '/' + str(y) + '_' + months[m+1] + '.txt'
+						filename = data_folder + '/' + str(y) + '/' + str(y) + '_' + months[m+1] + '.txt'
 			
 						# Daten des Folgemonats zeilenweise einlesen
 						with open(filename) as file:
@@ -174,29 +180,30 @@ for year in years:
 		days[1] = 28
 
 	# erster Wert des Jahres
-	firstNum = np.loadtxt(str(year)+ '/' + str(year) + '_Jan.txt')[0]
+	firstNum = np.loadtxt(data_folder + '/' + str(year) + '/' + str(year) + '_' + months[0] + '.txt')[0]
 		
 	for m in range(12):
 		content = readData(year,m)
-		listen = []
-		zeiten = []
-		for d in range(len(content)):
-			if content[d] == 0:
-				if d > 0:
-					Total[yss].append(Total[yss][-1])
+		if content is not '':
+			listen = []
+			zeiten = []
+			for d in range(len(content)):
+				if content[d] == 0:
+					if d > 0:
+						Total[yss].append(Total[yss][-1])
+					else:
+						Total[yss].append(Total[yss][-1])
 				else:
-					Total[yss].append(Total[yss][-1])
-			else:
-				Total[yss].append(content[d])
-				
-			TotalCompare[yss].append(Total[yss][-1]-firstNum)			
+					Total[yss].append(content[d])
+					
+				TotalCompare[yss].append(Total[yss][-1]-firstNum)			
 
-			Dates[yss].append(datetime(year,m+1,d+1))				
-			DatesCompare[yss].append(datetime(2016,m+1,d+1).date())
-			listen.append([Dates[yss][-1],Total[yss][-1]])
+				Dates[yss].append(datetime(year,m+1,d+1))				
+				DatesCompare[yss].append(datetime(2016,m+1,d+1).date())
+				listen.append([Dates[yss][-1],Total[yss][-1]])
 
-		newdata = pd.DataFrame(listen,columns=['Datum','Zählerstand'])
-		data = data.append(newdata,ignore_index=True)
+			newdata = pd.DataFrame(listen,columns=['Datum','Zählerstand'])
+			data = data.append(newdata,ignore_index=True)
 
 #
 data['Datum'] = pd.to_datetime(data['Datum'], format='%Y.%m.%d') # format='%d%b%Y:%H:%M:%S.%f'
@@ -247,7 +254,9 @@ for i in range(Jahre):
 
 fig, ax = plt.subplots()
 for i in range(len(years)):
-	ax.plot(date[i],plotdata[i],label=str(years[i]))
+	# Daten jahresweise plotten
+	# Neuere Daten liegen im Diagramm ueber aelteren Daten
+	ax.plot(date[i],plotdata[i],label=str(years[i]),zorder=len(years)-i)
 
 ax.legend(loc='upper left')
 plt.grid()
@@ -279,7 +288,10 @@ for i in range(len(Monate)):
 		# korrigeren
 		if i > 0:
 			tmp = [data['Zählerstand'][k] for k in range(len(mIndex)) if (mIndex[k] == i and yIndex[k] == years[j])]
-			endLastMonth = tmp[-1]
+			if len(tmp) == 0:
+				endLastMonth = 0
+			else:
+				endLastMonth = tmp[-1]
 		else:
 			if j < Jahre-1:
 				tmp = [data['Zählerstand'][k] for k in range(len(mIndex)) if (mIndex[k] == 12 and yIndex[k] == years[j+1])]
