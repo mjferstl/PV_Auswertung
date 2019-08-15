@@ -2,6 +2,7 @@
 # -----------------------------------------------------
 # Autor: mjferstl
 # Datum: 2019-01-01
+# Aenderungen: 2019-08-15
 # -----------------------------------------------------
 # INFO:
 # Der erste Tag eines Jahres muss einen Wert enthalten
@@ -12,209 +13,144 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib as mpl
 from matplotlib.backends.backend_pdf import PdfPages
-import os.path
+import os, sys, re
 import numpy as np
 from datetime import datetime
 import pandas as pd
 
-# Lists fuer die Jahre, Monate und die Anzahl der Tage
-years = [2019,2018,2017,2016,2015,2014,2013,2012]
-months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dez']
-days = [31,28,31,30,31,30,31,31,30,31,30,31]
+# Eigene Skripte
+from uty_DataDir import checkDataDir, DATA_DIR, getDataFiles, findValidDataFiles
 
-# Ornder mit den Daten 
-data_folder = 'Daten'
+# Variablen
+monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dez']
+daysPerMonth = [31,28,31,30,31,30,31,31,30,31,30,31]
+COL_DATE = 'Datum'
+COL_VALUES = 'Zaehlerstand'
 
-# Bezeichnugn der Monate fuer die Beschriftung der Plots
-Monate = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
+# Bezeichnung der Monate fuer die Beschriftung der Plots
+Monatsnamen = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
+
+
+# Pruefung, ob Daten vorhanden sind
+check = checkDataDir()
+dirIsOk, yearDirs = check[0], check[1]
+if dirIsOk:
+	print('Überprüfung, ob Daten vorhanden sind, war erfolgreich.')
+else:
+	sys.exit()
+
+# Jahreszahlen absteigend sortieren
+years = [int(year) for year in yearDirs]
+years.sort()
+
+# Prüfen, ob die Jahreszahlen direkt aufeinander folgen
+# Falls nicht, dann wird eine Warnung ausgegeben
+for y in range(len(years)-1):
+	if years[y+1] - years[y] != 1:
+		print('\n** Zwischen den Jahren ' + str(years[y]) + ' und ' + str(years[y+1]) + ' sind keine Daten vorhanden!\n')
+
 
 # Leere Lists fuer die Zaehlerstaende und das jeweilige Datum
 # Die Elemente der Lists enthatlen jeweils die Daten fuer ein ganzes Jahr
-Total = [[] for i in range(len(years))]
-Dates = [[] for i in range(len(years))]
+ZaehlerstaendeAbsolut = [[] for i in range(len(years))]
+Datum = [[] for i in range(len(years))]
 
 # Lists fuer den Plot des Monats-Vergleichs
-TotalCompare = [[] for i in range(len(years))]
-DatesCompare = [[] for i in range(len(years))]
+ZaehlerstaendeMonate = [[] for i in range(len(years))]
+DatumMonat = [[] for i in range(len(years))]
 
 # Pandas-Element als Datenbank
-data = pd.DataFrame(columns=['Datum','Zählerstand'])
+data = pd.DataFrame(columns=[COL_DATE,COL_VALUES])
 
-# Hilfsvarible
-n = 0
-
-# Funktion zum Einlesen der Daten aus Txt-Files
-# Parameter
-# - y: das aktuell auszuwertende Jahr als int
-# - m: den aktuell auszuwertenden Monat als fortlaufende Zahl von 0 bis 11
-def readData(y,m):
-	# Dateiname mit den Zaehlerstanden fuer aktuell auszuwertenden Monat
-	filename = data_folder + '/' + str(y) + '/' + str(y) + '_' + months[m] + '.txt'
-	
-	# Einlesen der Zeilen des Txt-Files
-	if not os.path.isfile(filename):
-		return ''
-
-	with open(filename) as file:
-		res = file.readlines()
-		
-	# In jeder Zeile '\n' und ' ' entfernen
-	res = [res[i].rstrip('\n') for i in range(len(res))]
-	res = [res[i].rstrip(' ') for i in range(len(res))]
-	
-	# Die Anzahl der Zeilen auf die Anzahl der Tage im aktuellen Monat reduzieren
-	#res = [res[i]for i in range(days[m])]
-	
-	# Interpolation, falls eine Zeile keinen Wert enthaelt
-	for i in range(len(res)):
-		
-		# Pruefen, ob die aktuelle Zeile einen Wert enthaelt
-		if res[i] == '':
-		
-			# Wenn kein Wert enthalten ist, dann aus vorhandenen Werten interpolieren
-			
-			# Wenn eine Zeile davor und eine Zeile danach einen Wert enthaelt, 
-			# dann kann mit den eingelesenen Daten interpoliert werden
-			check = False
-			for k in range(i+1,len(res)):
-				if res[k] != '' and res[k] != ' ':
-					try:
-						a = int(res[k])
-						check = True
-					except ValueError:
-						print('Fehler bei der Interpolation')
-						
-			if i > 0 and check:
-				# im aktuellen Monat interpolieren
-				
-				n = 0
-				# Zeile mit dem naechsten Eintrag finden
-				for j in range(i+1,len(res)):					
-					if res[j] != '' and res[j] != ' ':
-						n = j-i
-						break
-				
-				# Differenz von naechstem und letztem Wert
-				diff = int(res[i+n]) - int(res[i-1])
-				
-				# Die Werte bis zum naechsten Eintrag durch Interpolation bestimmen
-				# Eintrag in die List als String
-				for j in range(i,i+n):
-					res[j] = str(int(int(res[i-1]) + (diff/(n+1))*(j-i+1)))
-			
-			# wenn keine Interpolation innerhalb des Monats moeglich ist
-			else:
-				# ueber den Monat hinaus interpolieren
-				
-				# Wenn der erste Wert des Monats fehlt, dann mit Daten aus dem Vormonat interpolieren
-				if res[0] == '' or res[0] == ' ':
-				
-					# finde den naechsten Eintrag im aktuellen Monat
-					for j in range(len(res)):
-						if res[j] != '' and res[j] != ' ':
-							n = j							
-							break
-					
-					# letzten Eintrag aus dem Vormonat zur Interpolation nutzen
-					last = Total[yss][-1]
-					
-					# Differenz berechnen
-					diff = int(res[j])-last
-					
-					# Bis zum naechsten Eintrag im aktuellen Monat interpolieren
-					for j in range(n):
-						res[j] = last + diff/(n+1)*(j+1)
-				
-				# Wenn der letzte Tag des Monats keinen Wert enthaelt, dann muss mit den Daten des folgenden Monats interpoliert werden
-				else:
-					# Wenn es nicht der letzte Tag im letzten Monat des Jahres ist, dann Daten des Folgemonats laden
-					if m < (12-1):
-						filename = data_folder + '/' + str(y) + '/' + str(y) + '_' + months[m+1] + '.txt'
-			
-						# Pruefen, ob eine Datei fuer den Folgemonat vorhanden ist
-						if not os.path.isfile(filename):
-							return ''
-
-						# Daten des Folgemonats zeilenweise einlesen
-						with open(filename) as file:
-							resNext = file.readlines()
-
-						# '\n' in jedem Element des Lists entfernen
-						resNext = [resNext[i].rstrip('\n') for i in range(len(resNext))]
-						
-						# Suche den ersten Eintrag im Folgemonat
-						for j in range(len(resNext)):
-							if resNext[j] != '' and resNext[j] != ' ':
-								# Anzahl der zu interpolierenden Daten bestimmen
-								n = j + len([x for x in range(len(res)) if res[x] == '' or res[x] == ' '])
-								break
-								
-						# Differenz berechnen
-						diff = int(resNext[j]) - int(res[i-1])
-						
-						# Bis zum Monatsende interpolieren
-						for j in range(i,len(res)):
-							res[j] = int(res[i-1]) + diff/(n+1)*(j-i+1)
-					
-					# Wenn im aktuellen Jahr keine neuen Eintraege mehr enthalten sind, dann den letzten vorhandenen Wert in alle folgenden Elemente schreiben
-					else:
-						for j in range(i,len(res)):
-							res[j] = res[i-1]
-	
-	# Ergebnisse sind noch als String in der Lists
-	# Deshalb werden alle Elemente auf int formattiert
-	res = list(map(int, res))
-
-	return res
-		
-
-# counter for years since start
-yss = -1
-
-# load data
+# Schleife über alle Jahre
 for year in years:
-	
-	# Zeilenindex hochzaehlen
-	yss += 1
 
-	# Umschalten bei einem Schaltjahr
-	if year%4 == 0:
-		days[1] = 29
-	else:
-		days[1] = 28
+	# Anzahl der Tage im Februar in einem Schaltjahr anpassen
+	daysPerMonth[1] = 29 if (year%4 == 0) else 28		
 
-	# erster Wert des Jahres
-	firstNum = np.loadtxt(data_folder + '/' + str(year) + '/' + str(year) + '_' + months[0] + '.txt')[0]
-		
+	# Die Daten fuer alle Monate des Jahres finden
+	currDataDir = DATA_DIR + '\\' + str(year)
+	dataFileNames = findValidDataFiles(currDataDir,monthNames,Monatsnamen,year)
+
+	# Schleife über alle Monate
 	for m in range(12):
-		content = readData(year,m)
-		if content is not '':
-			listen = []
-			zeiten = []
-			for d in range(len(content)):
-				if content[d] == 0:
-					if d > 0:
-						Total[yss].append(Total[yss][-1])
-					else:
-						Total[yss].append(Total[yss][-1])
-				else:
-					Total[yss].append(content[d])
-					
-				TotalCompare[yss].append(Total[yss][-1]-firstNum)			
 
-				Dates[yss].append(datetime(year,m+1,d+1))				
-				DatesCompare[yss].append(datetime(2016,m+1,d+1).date())
-				listen.append([Dates[yss][-1],Total[yss][-1]])
+		# Pruefen, ob fuer den ersten Monat eine Datei vorhanden ist
+		if len(dataFileNames[m]) == 0:
+			continue
 
-			newdata = pd.DataFrame(listen,columns=['Datum','Zählerstand'])
-			data = data.append(newdata,ignore_index=True)
+		#### Daten des Monats laden
+		# Datum
+		days = [datetime(year,m+1,d+1) for d in range(daysPerMonth[m])]
+
+		# Zählerstände
+		filename = DATA_DIR + '\\' + str(year) + '\\' + dataFileNames[m]
+		with open(filename) as file:
+			res = file.readlines()
+		# In jeder Zeile '\n' und ' ' entfernen
+		res = [res[i].rstrip('\n') for i in range(len(res))]
+		values = [res[i].rstrip(' ') for i in range(len(res))]
+
+		# Liste der Zählerstände mit leeren Strings auffüllen, wenn in dem TXT-File zu wenig Einträge waren
+		if len(values) < len(days):
+			for i in range(len(days)-len(values)):
+				values.append('')
+		elif len(values) > len(days):
+			print('+++ Im ' + Monatsnamen[m] + ' sind mehr Einträge vorhanden, als der Monat Tage hat. +++')
+		
+
+		# DataFrame fuer Pandas-Tabelle erstellen
+		dFrame = []
+		for i in range(len(days)):
+			if values[i] == '':
+				dFrame.append([days[i],values[i]])
+			else:
+				dFrame.append([days[i],int(values[i])])
+
+		# Daten zur Tabelle hinzufuegen
+		newdata = pd.DataFrame(dFrame,columns=[COL_DATE,COL_VALUES])
+		data = data.append(newdata,ignore_index=True)
+
+
+
+def getNextValueWithIndex(currIndex,maxIndex):
+	for index in range(currIndex+1,maxIndex):
+		value = data.iloc[index,:][COL_VALUES]
+		if value != '':
+			return [int(value),index]
+
+	# Wenn kein neuer Wert bis zum Ende gefunden wurde, dann gibt es nicht mehr Datenpunkte
+	# Demnach ist keine Interpolation möglich
+	return ['','']
+
+
+# Überprüfung aller Werte und
+# Interolation fehlender Datenpunkte
+items = len(data)
+for i in range(1,items):
+	rawValue = data.iloc[i,:][COL_VALUES]
+	lastValue = int(data.iloc[i-1,:][COL_VALUES])
+
+	# Wenn ein Eintrag leer ist, dann werden die Daten interpoliert
+	if rawValue == '':
+		[nextValue,nextIndex] = getNextValueWithIndex(i,items)	
+		if nextValue == '' and nextIndex == '':
+			data.drop(data.index[[x for x in range(i,items)]],inplace=True)
+			break
+		interpolatedValue = lastValue + (nextValue-lastValue)/(nextIndex-i+1)
+		data.at[i, COL_VALUES] = int(interpolatedValue)
+		rawValue = interpolatedValue
+
+	if int(rawValue) - lastValue < 0:
+		print('* Fehler für den Wert vom '  + str(data.iloc[i,:][COL_DATE]))
+
 
 #
-data['Datum'] = pd.to_datetime(data['Datum'], format='%Y.%m.%d') # format='%d%b%Y:%H:%M:%S.%f'
-data['Tag'] = pd.DatetimeIndex(data['Datum']).day
-data['Monat'] = pd.DatetimeIndex(data['Datum']).month
-data['Jahr'] = pd.DatetimeIndex(data['Datum']).year
-Jahre = len(data.Jahr.unique())
+data[COL_DATE] = pd.to_datetime(data[COL_DATE], format='%Y.%m.%d') # format='%d%b%Y:%H:%M:%S.%f'
+data['Tag'] = pd.DatetimeIndex(data[COL_DATE]).day
+data['Monat'] = pd.DatetimeIndex(data[COL_DATE]).month
+data['Jahr'] = pd.DatetimeIndex(data[COL_DATE]).year
+Jahre = len(years)
 
 # PDF erstellen
 pdf_filename = ('Photovoltaik_' + str(min(years)) + '_bis_' + str(max(years)) + '.pdf')
@@ -229,14 +165,19 @@ mpl.rcParams['axes.linewidth'] = 0.7
 mpl.rcParams['xtick.labelsize'] = 8
 mpl.rcParams['ytick.labelsize'] = 8
 
+plotdata = [[] for i in range(Jahre)]
+date = [[] for i in range(Jahre)]
 # Den Verlauf des Zaehlerstands plotten
 fig, ax = plt.subplots()
 for i in range(len(years)):
-	ax.plot(Dates[i],Total[i],label=str(years[i]))
+	dataCurrYear = data.loc[data['Jahr'] == years[i]]
+	plotdata[i] = dataCurrYear.iloc[:,1]
+	date[i] = dataCurrYear.iloc[:,0]
+	ax.plot(dataCurrYear.iloc[:,0],dataCurrYear.iloc[:,1],label=str(years[i]))
 
 ax.legend(loc='upper left')
 plt.grid()
-plt.xlim((Dates[-1][0], Dates[0][-1]))
+plt.xlim((data.iloc[0,0],data.iloc[-1,0]))
 plt.xlabel('Tag')
 plt.ylabel('Zählerstand in kWh')
 plt.xticks(rotation=45)
@@ -245,28 +186,27 @@ fig.tight_layout()
 pdf.savefig()
 fig.clf()
 
+# Vergleich der Daten im Jahresverlauf
+dateCompare = [[] for i in range(Jahre)]
+dataCompare = [[] for i in range(Jahre)]
+for i in range(len(years)):
+	dataCurrYear = data.loc[data['Jahr'] == years[i]]
+	for j in range(len(dataCurrYear)):
+		dateCompare[i].append(datetime(2016,dataCurrYear.iloc[j,3],dataCurrYear.iloc[j,2]))
+		dataCompare[i].append(dataCurrYear.iloc[j,1]-dataCurrYear.iloc[0,1])
+
 # Einen Vergleich der ausgewaehlten Jahre plotten
-yIndex = pd.DatetimeIndex(data['Datum']).year
-
-plotdata = [[] for i in range(Jahre)]
-date = [[] for i in range(Jahre)]
-
-for i in range(Jahre):
-	plotdata[i] = [data['Zählerstand'][k] for k in range(len(data['Datum'])) if (yIndex[k] == years[i])]
-	plotdata[i] = [plotdata[i][m]-plotdata[i][0] for m in range(len(plotdata[i]))]
-	date[i] = [DatesCompare[i][k] for k in range(len(DatesCompare[i]))]  
-
 fig, ax = plt.subplots()
 for i in range(len(years)):
 	# Daten jahresweise plotten
 	# Neuere Daten liegen im Diagramm ueber aelteren Daten
-	ax.plot(date[i],plotdata[i],label=str(years[i]),zorder=len(years)-i)
+	ax.plot(dateCompare[i],dataCompare[i],label=str(years[i]))
 
 ax.legend(loc='upper left')
 plt.grid()
 myFmt = mdates.DateFormatter('%m-%d')
 ax.xaxis.set_major_formatter(myFmt)
-plt.xlim((date[-1][0], date[-1][-1]))
+plt.xlim((dateCompare[0][0], dateCompare[-2][-1]))
 plt.xlabel('Monat-Tag')
 ax.set_ylim(bottom=0)
 plt.ylabel('Strompoduktion seit Jahresbeginn in kWh')
@@ -276,53 +216,31 @@ fig.tight_layout()
 pdf.savefig()
 fig.clf()
 
-# Monate vergleichen
-plotdata = [[] for i in range(len(Monate))]
-date = [[] for i in range(len(Monate))]
-mIndex = pd.DatetimeIndex(data['Datum']).month
-yIndex = pd.DatetimeIndex(data['Datum']).year
-
-for i in range(len(Monate)):
-	plotdata[i] = [[] for k in range(Jahre)]
-	date[i] = [[] for k in range(Jahre)]	
-	
-	for j in range(Jahre):
-		date[i][j] = [data['Tag'][k] for k in range(len(mIndex)) if (mIndex[k] == i+1 and yIndex[k] == years[j])]
-		plotdata[i][j] = [data['Zählerstand'][k] for k in range(len(mIndex)) if (mIndex[k] == i+1 and yIndex[k] == years[j])]
-		# korrigeren
-		if i > 0:
-			tmp = [data['Zählerstand'][k] for k in range(len(mIndex)) if (mIndex[k] == i and yIndex[k] == years[j])]
-			if len(tmp) == 0:
-				endLastMonth = 0
-			else:
-				endLastMonth = tmp[-1]
-		else:
-			if j < Jahre-1:
-				tmp = [data['Zählerstand'][k] for k in range(len(mIndex)) if (mIndex[k] == 12 and yIndex[k] == years[j+1])]
-				endLastMonth = tmp[-1]
-			else:
-				endLastMonth = plotdata[i][j][0]
-				
-		plotdata[i][j] = [plotdata[i][j][m]-endLastMonth for m in range(len(plotdata[i][j]))]
 
 # Vegleiche die Monate jahresweise
-for i in range(len(Monate)):
+for i in range(len(Monatsnamen)):
+	dataCurrMonth = data.loc[data['Monat'] == i+1]
 	fig, ax = plt.subplots()
+	print(Monatsnamen[i])
 	for j in range(Jahre):
-		ax.plot(date[i][j],plotdata[i][j],label=str(years[j]))
+		dataCurrMonthYear = dataCurrMonth.loc[data['Jahr'] == years[j]]
+		dateCompare = [k+1 for k in range(len(dataCurrMonthYear))]
+		dataCompare = [k-dataCurrMonthYear.iloc[0,1] for k in dataCurrMonthYear.iloc[:,1]]
+		ax.plot(dateCompare,dataCompare,label=str(years[j]))
 
 	ax.legend(loc='upper left')	
 	plt.grid(which='major')
 	plt.grid(b=True, which='minor', color='r', linestyle='--')
 	
-	plt.xlim((1, max(max(date[i]))))
+	plt.xlim((1, 31))
 	plt.xlabel('Tag')
 	ax.set_ylim(bottom=0, top=5000)
 	plt.ylabel('Strompoduktion seit Monatsbeginn in kWh')
-	plt.title('Vergleich der Stromproduktion im Monat ' + Monate[i])
+	plt.title('Vergleich der Stromproduktion im Monat ' + Monatsnamen[i])
 	fig.tight_layout()
 	pdf.savefig()
 	fig.clf()
+
 
 pdf.close()
 print('PDF mit Ergebnissen wurde erstellt!')
