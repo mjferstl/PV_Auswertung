@@ -131,6 +131,10 @@ def readData(y,m):
 					if m < (12-1):
 						filename = data_folder + '/' + str(y) + '/' + str(y) + '_' + months[m+1] + '.txt'
 			
+						# Pruefen, ob eine Datei fuer den Folgemonat vorhanden ist
+						if not os.path.isfile(filename):
+							return ''
+
 						# Daten des Folgemonats zeilenweise einlesen
 						with open(filename) as file:
 							resNext = file.readlines()
@@ -301,17 +305,19 @@ for i in range(len(Monate)):
 				
 		plotdata[i][j] = [plotdata[i][j][m]-endLastMonth for m in range(len(plotdata[i][j]))]
 
+# Vegleiche die Monate jahresweise
 for i in range(len(Monate)):
 	fig, ax = plt.subplots()
 	for j in range(Jahre):
 		ax.plot(date[i][j],plotdata[i][j],label=str(years[j]))
 
 	ax.legend(loc='upper left')	
-	plt.grid()
+	plt.grid(which='major')
+	plt.grid(b=True, which='minor', color='r', linestyle='--')
 	
 	plt.xlim((1, max(max(date[i]))))
 	plt.xlabel('Tag')
-	ax.set_ylim(bottom=0)
+	ax.set_ylim(bottom=0, top=5000)
 	plt.ylabel('Strompoduktion seit Monatsbeginn in kWh')
 	plt.title('Vergleich der Stromproduktion im Monat ' + Monate[i])
 	fig.tight_layout()
@@ -320,4 +326,4 @@ for i in range(len(Monate)):
 
 pdf.close()
 print('PDF mit Ergebnissen wurde erstellt!')
-print(pdf_filename  + '\n')
+print('Datei: ' + pdf_filename  + '\n')
